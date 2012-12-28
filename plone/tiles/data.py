@@ -94,12 +94,29 @@ class PersistentTileDataManager(object):
     def get(self):
         data = dict(self.annotations.get(self.key, {}))
         if self.tileType is not None and self.tileType.schema is not None:
+            modified = False
             for name, field in getFields(self.tileType.schema).items():
                 if name not in data:
                     data[name] = field.missing_value
+                value = data.get(name)
+                if hasattr(value, 'absolute_url') and value.absolute_url() is '':
+                    # Relation field values are objects with no context.
+                    # Inject the context into them
+                    data[name] = value.__of__(self.tile.context)
+                    modified = False
+            if modified:
+                self.set(data)
+
+        # Add tile to data for use in places where only the data dict is 
+        # passed (such as IContextSourceBinder)
+        data['parent_tile'] = self
+
         return data
 
     def set(self, data):
+        # don't store the context_tile value if added during get
+        if data.has_key('parent_tile'):
+            del data['parent_tile']
         self.annotations[self.key] = PersistentDict(data)
 
     def delete(self):
